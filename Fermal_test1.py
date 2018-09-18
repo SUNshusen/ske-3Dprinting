@@ -1,9 +1,11 @@
 ##################################################
 # This script provides an example for 
-# 1. extract contours from mask image [slice]
-# 2. generate iso-contours 
+# 1. extract contours from mask image [simulate stl slicing]
+# 2. generate iso-contours [generate filling path  
+# 3. connect iso-contour to fermal spirals
 # Todo:
-# decomposite domain 
+# 1. smooth curve 
+# 2. decomposite filling domain 
 import cv2
 import numpy as np
 
@@ -89,6 +91,7 @@ def generate_RGB_list(N):
     rgb_list = tuple(RGB_tuples)
     return np.array(rgb_list) * 255
 
+
 ######################################
 # Resample List (N < input_size/2) #
 # input_list: contour in m*2 ndarray #
@@ -102,14 +105,15 @@ def resample_list(input_list, N):
 #############################################
 # Recursively generate iso contour #
 #############################################
-def generate_iso_contour(contour, offset):
+def generate_iso_contour(contour, offset, is_draw = False):
     global gContours
     inter_contour = gen_internal_contour_by_clipper(contour, offset) 
     N = len(inter_contour)
     if N != 0:
         for c in inter_contour:
             cc = np.array(c)
-            draw_line(np.vstack([cc, cc[0]]), img, [0,255,0])
+            if(is_draw):
+                draw_line(np.vstack([cc, cc[0]]), img, [0,255,0])
             gContours.append(cc)
         
         generate_iso_contour(inter_contour, offset)
@@ -125,78 +129,149 @@ def next_idx(idx, contour):
         return idx + 1
     if idx == len(contour) - 1:
         return 0
-        
-
-def function_connect(idx_start_point, contour1, contour2,offset):
-    ## find e1
-    idx_end_point = prev_idx(idx_start_point, contour1)
-    start_point = contour1[idx_start_point]
-    end_point=[]
-    idx_start_point2 = -1
-    
-    for i in range(0,len(contour1)-1):
-        end_point = contour1[idx_end_point]
-        distance=np.linalg.norm(start_point-end_point)
-        if distance>offset:           
-            break
-        else:
-            idx_end_point = prev_idx(idx_end_point, contour1)
-    ## find s2
+#######################################
+# find nearest index of point in a contour
+# @in: point value(not index), a contour
+# @out: the index of a nearest point
+#####################################
+def find_nearest_point_idx(point, contour):
+    idx = -1
     distance = float("inf")   
-    for i in range(0,contour2.shape[0]-1):        
-        d = np.linalg.norm(end_point-contour2[i])
+    for i in range(0,contour.shape[0]-1):        
+        d = np.linalg.norm(point-contour[i])
         if d < distance:
             distance = d
-            idx_start_point2 = i
-            
-    new_contour = []
-    idx = idx_start_point
+            idx = i
+    return idx
+##########################################################################
+#find an index of point from end, with distance larger than T
+#@in: current index of point, current contour, 
+#@in: T is a distance can be set to offset or offset/2 or 2 * offset
+##########################################################################
+def find_point_index_by_distance(cur_point_index, cur_contour, T):
+    T = abs(T)
+    start_point = cur_contour[cur_point_index]
+    idx_end_point = prev_idx(cur_point_index, cur_contour)
     
-    while idx != idx_end_point:
-        new_contour.append(contour1[idx])
-        idx = next_idx(idx, contour1)
-    
-    new_contour.append(contour2[idx_start_point2])  
-    
-    return idx_end_point, idx_start_point2, new_contour 
+    end_point=[]        
+    for ii in range(0,len(cur_contour)-1):
+        end_point = cur_contour[idx_end_point]
+        distance=np.linalg.norm(start_point-end_point)            
+        if distance > T:           
+            break
+        else:         
+            print(idx_end_point)
+            idx_end_point = prev_idx(idx_end_point, cur_contour)  
+    return idx_end_point
+
+##############################################################
+# @in: iso contours, index of start point, offset
+# @out: a single poly
+# If you want connect in then connect out,
+# you can divide contours into two sets, and run it twice,
+# then connect them.
+##############################################################
+def contour2spiral(contours, idx_start_point, offset):
+    offset = abs(offset)
+    cc = [] # contour for return
+    N = len(contours)
+    for i in range(N):
+        contour1 = contours[i]        
+        
+        ## find end point(e1)
+        idx_end_point = find_point_index_by_distance(idx_start_point, contour1, 2*offset)
+        end_point = contour1[idx_end_point]
+        
+        # add contour segment to cc
+        idx = idx_start_point
+        while idx != idx_end_point:
+            cc.append(contour1[idx])
+            idx = next_idx(idx, contour1)   
+        
+        if(i == N-1): 
+            break
+        
+        ## find s2   
+        idx_start_point2 = find_nearest_point_idx(end_point, contours[i+1])         
+        
+        idx_start_point = idx_start_point2   
+        
+        
+    return cc     
+
+def connect_spiral(first_spiral, second_spiral, is_flip=True):
+    s = []
+    if is_flip:
+        second_spiral = np.flip(second_spiral, 0)
+        
+    for i in range(len(first_spiral)):
+        s.append(first_spiral[i])                 
+    for i in range(len(second_spiral)):
+        s.append(second_spiral[i])
+    return s
+
+from scipy.signal import savgol_filter
+def smooth_curve_by_savgol(c, filter_width=5, polynomial_order=1):
+    N = 10
+    c = np.array(c)
+    y = c[:, 1]
+    x = c[:, 0]
+    x2 = savgol_filter(x, filter_width, polynomial_order)
+    y2 = savgol_filter(y, filter_width, polynomial_order)
+    c = np.transpose([x2,y2])
+    return c
+
 
 if __name__ == '__main__':
-    offset = -20 # inner offset
+    offset = -11 # inner offset
     nSamle = 1000 # number of resample vertices
     gContours = []
     
-    im, contours, areas, hiearchy, root_contour_idx = generate_contours_from_img("C:/Users/hero/Desktop/iso-contour/two-circle.png")
-    height, width = im.shape[0], im.shape[1] # picture's size
-    img = np.zeros((height, width, 3), np.uint8) + 255 # for demo
+    im, contours, areas, hiearchy, root_contour_idx = generate_contours_from_img("./data/circle.png")
+    height, width = im.shape[0], im.shape[1]             # picture's size
+    img = np.zeros((height, width, 3), np.uint8) + 255   # for demostration
     
     vc = get_valid_contours(contours, areas, hiearchy, root_contour_idx) # remove contours that area < 5 (estimated value)
-    color_list = generate_RGB_list(int(200/np.abs(offset))) # for demo
-    cv2.drawContours(img, vc, -1, (0,0,255), 2) # draw original contour on slice surface  
+    color_list = generate_RGB_list(int(200/np.abs(offset))) # for demo    
     
     solution = [] # input contours: include outer shape contours and inner hole contours
     for idx in range(0, len(vc)):
         c = np.reshape(vc[idx], (vc[idx].shape[0],2))
-        #c = resample_list(c, nSamle)
+        #c = resample_list(c, len(c)/1)
+        c = np.flip(c,0)    # reverse index order
         solution.append(c)    
         
     gContours.append(solution[0])
     generate_iso_contour(solution, offset)
-    #print(len(gContours))
-    e=[]
-    s=[]
     
-    for i in range(0,len(gContours)-1):
-        if i==0:
-            e1, s2, nc = function_connect(0, gContours[i], gContours[i+1], offset)
-            e.append(e1)
-            s.append(s2)
+    #connect
+    ## divide contours into two groups(by odd/even)
+    in_contour_groups = []
+    out_contour_groups = []
+    for idx in range(len(gContours)):
+        if (idx % 2 == 0):
+            in_contour_groups.append(gContours[idx])
         else:
-            e1,s2,nc= function_connect(s[i-1],gContours[i],gContours[i+1],offset)
-            e.append(e1)
-            s.append(s2)
-        #print(e1)
-        #print(s2)
-        draw_line(np.array(nc), img, [0, 255, 255], 2)
-        #print(nc)
+            out_contour_groups.append(gContours[idx])
+            
+    
+    cc_in = contour2spiral(in_contour_groups, 0, offset )
+    output_index = find_nearest_point_idx(in_contour_groups[0][0], out_contour_groups[0]) 
+           
+    cc_out = contour2spiral(out_contour_groups, output_index, offset )
+    
+    ## connect two spiral
+    fspiral = connect_spiral(cc_in, cc_out)
+    ## set out point
+    out_point_index = find_point_index_by_distance(0, in_contour_groups[0], offset)
+    fspiral.append(in_contour_groups[0][out_point_index])   
+    ## smooth withe filter size 7, order 1
+    fspiral = smooth_curve_by_savgol(fspiral, 5, 1)
+    draw_line(np.array(fspiral), img, [255, 0, 0], 1) 
+    
+    #draw point
+    cv2.circle(img,tuple(in_contour_groups[0][0]), 4, (0, 0, 255), -1)
+    cv2.circle(img,tuple(in_contour_groups[0][out_point_index]), 4, (0, 0, 255), -1)
+  
     cv2.imshow("Art", img)
     cv2.waitKey(0)    
