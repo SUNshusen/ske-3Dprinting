@@ -160,7 +160,6 @@ def find_point_index_by_distance(cur_point_index, cur_contour, T):
         if distance > T:           
             break
         else:         
-            print(idx_end_point)
             idx_end_point = prev_idx(idx_end_point, cur_contour)  
     return idx_end_point
 
@@ -223,18 +222,18 @@ def smooth_curve_by_savgol(c, filter_width=5, polynomial_order=1):
 
 
 if __name__ == '__main__':
-    offset = -11 # inner offset
+    offset = -0.4 # inner offset
     nSamle = 1000 # number of resample vertices
     gContours = []
     
-    im, contours, areas, hiearchy, root_contour_idx = generate_contours_from_img("./data/circle.png")
+    im, contours, areas, hiearchy, root_contour_idx = generate_contours_from_img("C:/Users/hero/Desktop/iso-contour/circle1.png")
     height, width = im.shape[0], im.shape[1]             # picture's size
     img = np.zeros((height, width, 3), np.uint8) + 255   # for demostration
     
     vc = get_valid_contours(contours, areas, hiearchy, root_contour_idx) # remove contours that area < 5 (estimated value)
     color_list = generate_RGB_list(int(200/np.abs(offset))) # for demo    
     
-    solution = [] # input contours: include outer shape contours and inner hole contours
+    solution = [] # input contours: include outer shape contours and inner hole contourscircle
     for idx in range(0, len(vc)):
         c = np.reshape(vc[idx], (vc[idx].shape[0],2))
         #c = resample_list(c, len(c)/1)
@@ -274,4 +273,173 @@ if __name__ == '__main__':
     cv2.circle(img,tuple(in_contour_groups[0][out_point_index]), 4, (0, 0, 255), -1)
   
     cv2.imshow("Art", img)
-    cv2.waitKey(0)    
+    cv2.waitKey(0)   
+    E=0
+    print("""
+; external perimeters extrusion width = 0.40mm
+; perimeters extrusion width = 0.67mm
+; infill extrusion width = 0.67mm
+; solid infill extrusion width = 0.67mm
+; top infill extrusion width = 0.67mm
+
+M107
+M190 S40 ; set bed temperature
+M104 S190 ; set temperature
+G28 ; home all axes
+G1 Z5 F5000 ; lift nozzle
+
+M109 S190 ; wait for temperature to be reached
+G21 ; set units to millimeters
+G90 ; use absolute coordinates
+M82 ; use absolute distances for extrusion
+G92 E0
+G1 E-3.00000 F1800.00000
+G92 E0
+G1 Z0.350 F4800.000""")
+    
+    print("G1","X"+str("%0.3f"%fspiral[0][0])+" Y"+str("%0.3f"%fspiral[0][1]) +"F4800")
+    print("G1 E3.00000 F1800")
+    E=3
+    for i in range (0,len(fspiral)-1):
+        if i==0:
+            print("G1","X"+str("%0.3f"%fspiral[i][0])+" Y"+str("%0.3f"%fspiral[i][1]) + " E" + str("%0.3f"%E))
+        else:
+            distance=np.linalg.norm(fspiral[i]-fspiral[i-1])
+            E=distance*0.0909+E
+            print("G1","X"+str("%0.3f"%fspiral[i][0])+" Y"+str("%0.3f"%fspiral[i][1]) + " E" + str("%0.5f"%E))
+    print("""G1 E6.95908 F1800.00000
+G92 E0
+M104 S0 ; turn off temperature
+G28 X0  ; home X axis
+M84     ; disable motors
+
+; filament used = 148.9mm (0.4cm3)
+
+; avoid_crossing_perimeters = 0
+; bed_shape = -100x-100,100x-100,100x100,-100x100
+; bed_temperature = 10
+; before_layer_gcode = 
+; bridge_acceleration = 0
+; bridge_fan_speed = 100
+; brim_width = 0
+; complete_objects = 0
+; cooling = 1
+; default_acceleration = 0
+; disable_fan_first_layers = 1
+; duplicate_distance = 6
+; end_gcode = M104 S0 ; turn off temperature\nG28 X0  ; home X axis\nM84     ; disable motors\n
+; extruder_clearance_height = 20
+; extruder_clearance_radius = 20
+; extruder_offset = 0x0
+; extrusion_axis = E
+; extrusion_multiplier = 1,1
+; fan_always_on = 0
+; fan_below_layer_time = 60
+; filament_colour = #FFFFFF
+; filament_diameter = 1.75,1.75
+; first_layer_acceleration = 0
+; first_layer_bed_temperature = 10
+; first_layer_extrusion_width = 200%
+; first_layer_speed = 30%
+; first_layer_temperature = 190,190
+; gcode_arcs = 0
+; gcode_comments = 0
+; gcode_flavor = reprap
+; infill_acceleration = 0
+; infill_first = 0
+; layer_gcode = 
+; max_fan_speed = 0
+; max_print_speed = 60
+; max_volumetric_speed = 0
+; min_fan_speed = 35
+; min_print_speed = 10
+; min_skirt_length = 0
+; notes = 
+; nozzle_diameter = 0.4
+; only_retract_when_crossing_perimeters = 1
+; ooze_prevention = 0
+; output_filename_format = [input_filename_base].gcode
+; perimeter_acceleration = 0
+; post_process = 
+; pressure_advance = 0
+; resolution = 0
+; retract_before_travel = 2
+; retract_layer_change = 1
+; retract_length = 3
+; retract_length_toolchange = 10
+; retract_lift = 0
+; retract_restart_extra = 0
+; retract_restart_extra_toolchange = 0
+; retract_speed = 30
+; skirt_distance = 6
+; skirt_height = 1
+; skirts = 1
+; slowdown_below_layer_time = 30
+; spiral_vase = 0
+; standby_temperature_delta = -5
+; start_gcode = G28 ; home all axes\nG1 Z5 F5000 ; lift nozzle\n
+; temperature = 190,190
+; threads = 2
+; toolchange_gcode = 
+; travel_speed = 80
+; use_firmware_retraction = 0
+; use_relative_e_distances = 0
+; use_volumetric_e = 0
+; vibration_limit = 0
+; wipe = 0
+; z_offset = 0
+; dont_support_bridges = 1
+; extrusion_width = 0
+; first_layer_height = 0.35
+; infill_only_where_needed = 0
+; interface_shells = 0
+; layer_height = 0.2
+; raft_layers = 0
+; seam_position = aligned
+; support_material = 0
+; support_material_angle = 0
+; support_material_contact_distance = 0.2
+; support_material_enforce_layers = 0
+; support_material_extruder = 1
+; support_material_extrusion_width = 0
+; support_material_interface_extruder = 1
+; support_material_interface_layers = 3
+; support_material_interface_spacing = 0
+; support_material_interface_speed = 100%
+; support_material_pattern = pillars
+; support_material_spacing = 2.5
+; support_material_speed = 60
+; support_material_threshold = 90
+; xy_size_compensation = 0
+; bottom_solid_layers = 3
+; bridge_flow_ratio = 1
+; bridge_speed = 60
+; external_fill_pattern = rectilinear
+; external_perimeter_extrusion_width = 0
+; external_perimeter_speed = 70%
+; external_perimeters_first = 0
+; extra_perimeters = 1
+; fill_angle = 45
+; fill_density = 20%
+; fill_pattern = honeycomb
+; gap_fill_speed = 20
+; infill_every_layers = 1
+; infill_extruder = 1
+; infill_extrusion_width = 0
+; infill_overlap = 15%
+; infill_speed = 60
+; overhangs = 1
+; perimeter_extruder = 1
+; perimeter_extrusion_width = 0
+; perimeter_speed = 30
+; perimeters = 3
+; small_perimeter_speed = 30
+; solid_infill_below_area = 70
+; solid_infill_every_layers = 0
+; solid_infill_extruder = 1
+; solid_infill_extrusion_width = 0
+; solid_infill_speed = 60
+; thin_walls = 1
+; top_infill_extrusion_width = 0
+; top_solid_infill_speed = 50
+; top_solid_layers = 3""")
